@@ -1,4 +1,4 @@
-"""Assignment 4, Part I: PAC learning and VC dimension. Run top to bottom."""
+#Brayden Molinyawe and Luca Toth worked on this assingmment in equal parts.
 import itertools, warnings
 import numpy as np
 import matplotlib
