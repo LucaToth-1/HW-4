@@ -16,8 +16,11 @@ SEED = 0
 ETA = 0.05
 
 # ---------------------------------------------------------------- P1
+
+# Calculate the VC confidence term using equation 1
+# As h increases, the bound generally becomes larger
 def f_m(h, m, eta=ETA):
-    """VC confidence term, eq. (1). Works with scalar or array h."""
+    # VC confidence term, eq. (1). Works with scalar or array h
     h = np.asarray(h, dtype=float)
     return np.sqrt((h * (np.log(2 * m / h) + 1) - np.log(eta / 4)) / m)
 
@@ -39,11 +42,14 @@ for m in (10**3, 10**4, 10**5):
 
 m = 10**4
 for remp in (0.0, 0.05):
+    # Check which VC dimensions keep the total error bound at or below 0.1
+    # Do this for both training error values
     ok = [h for h in range(1, m + 1) if remp + f_m(h, m) <= 0.1]
     print(f"m=1e4, Remp={remp}: largest h with bound <= 0.1 is {max(ok) if ok else None}")
 
 # ---------------------------------------------------------------- P2
 print("\n=== P2 ===")
+# Convert the separation requirements into inequalities for linprog
 def separable(X, y):
     m, n = X.shape
     A_ub = -y[:, None] * np.hstack([X, np.ones((m, 1))])
@@ -51,14 +57,18 @@ def separable(X, y):
                   bounds=[(None, None)] * (n + 1), method="highs")
     return res.status == 0
 
+# Find which labelings cannot be separated by a line 
 def bad_labelings(X):
-    """All non-separable labelings (both y and -y listed)."""
+    # All non-separable labelings (both y and -y listed)
     bad = []
     for y in itertools.product([-1, 1], repeat=len(X)):
         if not separable(X, np.array(y, dtype=float)):
             bad.append(y)
     return bad
 
+# Test the possible ways to label points.
+# Only need to check labels starting with +1 because flipping every label
+# does not change whether a separator exists or not.
 def can_shatter(X):
     # y and -y are equally (non)separable, so fix y_0 = +1 and stop at first failure
     for rest in itertools.product([-1, 1], repeat=len(X) - 1):
@@ -121,12 +131,14 @@ print("\n=== P3 ===")
 LO, HI = np.array([0.2, 0.3]), np.array([0.7, 0.6])
 AREA = np.prod(HI - LO)  # 0.15
 
+# Simulate multiple training sets for the rectangle learner
 def trial_errors(m, T, rng):
     X = rng.random((T, m, 2))
-    pos = np.all((X >= LO) & (X <= HI), axis=2)           # (T, m)
+    pos = np.all((X >= LO) & (X <= HI), axis=2)      
     anyp = pos.any(1)
-    big = np.where(pos[..., None], X, np.inf).min(1)       # (T, 2) lower corner
-    sml = np.where(pos[..., None], X, -np.inf).max(1)      # (T, 2) upper corner
+    # Find min and max coordinates of positive points
+    big = np.where(pos[..., None], X, np.inf).min(1) # lower corner
+    sml = np.where(pos[..., None], X, -np.inf).max(1) # upper corner
     area = np.where(anyp, np.prod(sml - big, axis=1), 0.0)
     return AREA - area
 
@@ -139,6 +151,7 @@ for m in ms:
     mean_err.append(R.mean()); p_bad.append(np.mean(R > eps))
     print(f"m={m:>4}: mean R={R.mean():.5f}  P(R>0.05)={p_bad[-1]:.4f}")
 
+# Calculate the theoretical PAC sample size using epsilon and delta
 m_theory = int(np.ceil(4 / eps * np.log(4 / delta)))
 print("theoretical m:", m_theory)
 
@@ -160,22 +173,28 @@ ax[1].set_xlabel("m"); ax[1].set_ylabel(r"$\hat P(R>\varepsilon)$, $\varepsilon=
 ax[1].set_title("Failure probability"); ax[1].legend()
 plt.tight_layout(); plt.savefig("p3_rectangles.png", dpi=150); plt.close()
 
+# Fit a line to the log-log data to estimate how quickly error decreases
 slope, _ = np.polyfit(np.log(ms), np.log(mean_err), 1)
 print(f"fitted slope: {slope:.3f}  (R ~ m^{-abs(slope):.2f})")
 
 # ---------------------------------------------------------------- P4
 print("\n=== P4 ===")
 rng = np.random.default_rng(SEED)
+#Generate random x values and label them using the sine function
+# Flip 10% of the labels to simulate noise in the dataset
 def make(m):
     x = rng.uniform(-1, 1, m)
     y = np.where(np.sin(3 * np.pi * x) > 0, 1, -1)
     flip = rng.random(m) < 0.1
     return x, np.where(flip, -y, y)
 x_tr, y_tr = make(200); x_te, y_te = make(10**4)
+# Use Legendre polynomial features instead of regular powers of x
 feats = lambda x, d: legvander(x, d)[:, 1:]
 
 ds = list(range(1, 16))
 emp, bound, test, cv = [], [], [], []
+# Train a classifier for each polynomial degree from 1 to 15
+# Compare training error, VC bound, cross-validation and test error
 for d in ds:
     clf = LinearSVC(C=1e4, max_iter=200000)
     clf.fit(feats(x_tr, d), y_tr)
@@ -184,6 +203,7 @@ for d in ds:
     cvs = 1 - cross_val_score(LinearSVC(C=1e4, max_iter=200000),
                               feats(x_tr, d), y_tr, cv=5).mean()
     emp.append(tr); test.append(te); cv.append(cvs)
+    # Add the VC confidence term to the training error
     bound.append(tr + float(f_m(d + 1, 200)))
     print(f"d={d:>2}: train={tr:.3f} bound={bound[-1]:.3f} cv={cvs:.3f} test={te:.3f}")
 
